@@ -102,8 +102,8 @@ html[data-theme="dark"] .model-chip.active, html[data-theme="dark"] .benchmark-c
 .segmented button.active { background: var(--wash); color: var(--green-strong); }
 .segmented button:hover { color: var(--green); }
 .table-scroll { width: 100%; max-height: 72vh; overflow: auto; overscroll-behavior: contain; border: 1px solid var(--line); scrollbar-width: thin; }
-table { width: 100%; border-collapse: separate; border-spacing: 0; text-align: left; font-variant-numeric: tabular-nums; }
-th, td { padding: 7px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+table { width: 100%; border-collapse: separate; border-spacing: 0; text-align: center; font-variant-numeric: tabular-nums; }
+th, td { padding: 7px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; text-align: center; vertical-align: middle; }
 th { color: var(--sub); background: var(--hover); font-size: 13px; font-weight: 600; }
 th button { padding: 0; font: inherit; color: inherit; }
 th button:hover { color: var(--green); }
@@ -111,31 +111,37 @@ td { color: var(--ink); font-size: 12px; }
 tbody tr:last-child td { border-bottom: 0; }
 tbody tr:hover td { background: var(--hover); }
 .matrix { min-width: 100%; width: max-content; }
-.matrix th, .matrix td { min-width: 90px; text-align: right; }
+.matrix th, .matrix td { min-width: 90px; text-align: center; }
 .matrix thead th { position: sticky; top: 0; z-index: 3; height: 32px; }
 .matrix thead tr:nth-child(2) th { top: 32px; }
 .matrix .group-heading { border-left: 1px solid var(--line); text-align: center; }
 .matrix .metric-heading { font-size: 12px; font-weight: 400; }
 .metric-heading span { display: block; font-size: 13px; font-weight: 600; }
 .metric-heading small { display: block; margin-top: 3px; color: var(--muted); font: 9px Arial, Helvetica, sans-serif; }
-.matrix .model-column { position: sticky; left: 0; min-width: 218px; width: 218px; max-width: 280px; text-align: left; background: var(--panel); border-right: 1px solid var(--line); z-index: 2; }
+.matrix .model-column { position: sticky; left: 0; min-width: 218px; width: 218px; max-width: 280px; text-align: center; background: var(--panel); border-right: 1px solid var(--line); z-index: 2; }
 .matrix thead .model-column { z-index: 5; background: var(--hover); }
 .matrix tbody tr:hover .model-column { background: var(--hover); }
-.model-name { display: block; max-width: 240px; overflow: hidden; text-overflow: ellipsis; padding: 0; text-align: left; color: var(--ink); font-size: 13px; font-weight: 600; }
+.model-name { display: block; max-width: 240px; margin-inline: auto; overflow: hidden; text-overflow: ellipsis; padding: 0; text-align: center; color: var(--ink); font-size: 13px; font-weight: 600; }
 button.model-name:hover { color: var(--green); }
-.score-cell { display: inline-block; min-width: 52px; margin: -4px -6px; padding: 4px 6px; border-radius: 2px; font: inherit; text-align: right; font-variant-numeric: tabular-nums; }
+.score-cell { display: inline-block; min-width: 52px; margin: -4px -6px; padding: 4px 6px; border-radius: 2px; font: inherit; text-align: center; font-variant-numeric: tabular-nums; }
 .score-cell:hover, .score-cell:focus-visible { background: var(--wash); color: var(--green-strong); }
 .score-cell.best, .score-best, .best-score { color: var(--green-strong); font-weight: 700; }
+td.score-heat, tbody tr:hover td.score-heat { background: var(--score-color-light); color: var(--score-ink, var(--ink)); }
+html[data-theme="dark"] td.score-heat, html[data-theme="dark"] tbody tr:hover td.score-heat { background: var(--score-color-dark); }
+td.score-heat .score-cell, td.score-heat .score-cell.best, td.score-heat .score-best, td.score-heat.best-score { color: var(--score-ink, var(--ink)); }
+td.score-heat .score-cell:hover, td.score-heat .score-cell:focus-visible { background: transparent; color: var(--score-ink, var(--ink)); text-decoration: underline; text-underline-offset: 3px; }
 .table-footer { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 5px 15px; padding-top: 9px; color: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; }
 .table-footer strong { font-size: 12px; font-weight: 400; }
+.score-scale { display: inline-flex; align-items: center; gap: 5px; }
+.score-gradient { display: inline-block; width: 72px; height: 6px; border-radius: 1px; background: linear-gradient(to right, #440154, #472d7b, #3b528b, #2c728e, #21918c, #28ae80, #5ec962, #addc30, #fde725); }
 .empty { padding: 34px 16px; text-align: center; color: var(--muted); font-size: 12px; }
 .empty strong { display: block; margin-bottom: 6px; color: var(--ink); font-size: 16px; }
 .empty p { margin-bottom: 10px; }
 .curve-panel { min-width: 0; padding-top: 2px; }
 .curve-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
 .benchmark-select, .metric-select { max-width: 260px; }
-.curve-wrap { position: relative; max-width: 1100px; margin: 0 auto; }
-.curve-svg { display: block; width: 100%; max-width: 1100px; height: auto; margin: 0 auto; overflow: visible; }
+.curve-wrap { position: relative; width: 100%; max-width: 680px; margin: 0 auto; }
+.curve-svg { display: block; width: 100%; max-width: 680px; height: auto; aspect-ratio: 1; margin: 0 auto; overflow: visible; }
 .curve-svg text { fill: var(--muted); font: 10px Arial, Helvetica, sans-serif; }
 .curve-grid { stroke: var(--chart-grid); stroke-dasharray: 3 4; }
 .chart-point { cursor: crosshair; outline-offset: 2px; }
@@ -145,7 +151,7 @@ button.model-name:hover { color: var(--green); }
 .legend-item button { padding: 0; font: inherit; }
 .legend-dot { display: inline-block; width: 6px; height: 6px; flex-shrink: 0; border-radius: 50%; }
 .curve-table { min-width: 700px; }
-.curve-table th:not(:first-child), .curve-table td:not(:first-child) { text-align: right; }
+.curve-table th, .curve-table td { text-align: center; }
 .curve-table td:first-child, .curve-table th:first-child { position: sticky; left: 0; min-width: 218px; background: var(--panel); border-right: 1px solid var(--line); }
 .curve-table th:first-child { background: var(--hover); }
 .curve-table td:first-child { font-family: var(--serif); font-size: 13px; }

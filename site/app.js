@@ -8,6 +8,16 @@ const icons = {
 };
 const icon = name => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[name]||''}</svg>`;
 const colors=['#18765c','#5b6eb3','#bc723c','#9b5d91','#3987a0','#788b38','#c25c5c','#726450','#3f827a','#847ab1','#8f7734','#9c6570','#526b91','#677d63'];
+// Viridis, fixed to the report's 0–1 score range across every table and selection.
+const scoreColors=['440154','472d7b','3b528b','2c728e','21918c','28ae80','5ec962','addc30','fde725'].map(hex=>[0,2,4].map(offset=>parseInt(hex.slice(offset,offset+2),16)));
+function heatAttributes(value){
+  if(!isNumber(value))return '';
+  const position=Math.max(0,Math.min(1,value))*(scoreColors.length-1),i=Math.min(Math.floor(position),scoreColors.length-2),fraction=position-i;
+  const rgb=scoreColors[i].map((channel,c)=>Math.round(channel+(scoreColors[i+1][c]-channel)*fraction));
+  const linear=rgb.map(channel=>{const s=channel/255;return s<=.04045?s/12.92:((s+.055)/1.055)**2.4;});
+  const luminance=linear[0]*.2126+linear[1]*.7152+linear[2]*.0722,color=`rgb(${rgb.join(',')})`;
+  return `class="score-heat" style="--score-color-light:${color};--score-color-dark:${color};--score-ink:${luminance>.179?'#000':'#fff'}"`;
+}
 let data,index,state,toastTimer,dialogRequest=0;
 const breakdownCache=new Map();
 function readStorage(key){try{return localStorage.getItem(key);}catch{return null;}}
@@ -30,10 +40,9 @@ function getState(){
   const p=new URLSearchParams(location.hash.slice(1));
   // Keep previously shared report links usable after the navigation change.
   const oldSample=p.get('view')==='sampling';
-  const s={run:oldSample?'sample128':p.get('run')||'greedy',k:Number(p.get('k')||1),mode:p.get('mode')||(oldSample?'curves':'table'),metricMode:p.get('metrics')||'primary',query:p.get('q')||'',family:p.get('family')||'all',category:p.get('suite')||'all',benchmark:p.get('benchmark')||'ai2d',metric:p.get('metric')||'accuracy',sortBenchmark:p.get('sortBenchmark')||'',sortMetric:p.get('sortMetric')||'',direction:p.get('direction')||'desc',modelIds:selectedList(p,'models',data.models.map(m=>m.id)),benchIds:selectedList(p,'benches',data.benchmarks.map(b=>b.id))};
+  const s={run:oldSample?'sample128':p.get('run')||'greedy',k:Number(p.get('k')||1),metricMode:p.get('metrics')||'primary',query:p.get('q')||'',family:p.get('family')||'all',category:p.get('suite')||'all',benchmark:p.get('benchmark')||'ai2d',metric:p.get('metric')||'accuracy',sortBenchmark:p.get('sortBenchmark')||'',sortMetric:p.get('sortMetric')||'',direction:p.get('direction')||'desc',modelIds:selectedList(p,'models',data.models.map(m=>m.id)),benchIds:selectedList(p,'benches',data.benchmarks.map(b=>b.id))};
   if(!['greedy','sample128'].includes(s.run))s.run='greedy';
   if(!KS.includes(s.k))s.k=1;
-  if(!['table','curves'].includes(s.mode))s.mode='table';
   if(!['primary','all'].includes(s.metricMode))s.metricMode='primary';
   if(!['all','text','vision','instruction'].includes(s.category))s.category='all';
   if(!['all',...data.models.map(m=>m.family)].includes(s.family))s.family='all';
@@ -48,14 +57,14 @@ function normalize(){
   if(state.sortBenchmark&&!bs.some(b=>b.id===state.sortBenchmark&&(state.metricMode==='all'?b.metrics:[b.primaryMetric]).includes(state.sortMetric))){state.sortBenchmark='';state.sortMetric='';}
 }
 function writeURL(){
-  const p=new URLSearchParams({run:state.run,k:String(state.k),mode:state.mode,metrics:state.metricMode,models:state.modelIds.join(','),benches:state.benchIds.join(','),benchmark:state.benchmark,metric:state.metric});
+  const p=new URLSearchParams({run:state.run,k:String(state.k),metrics:state.metricMode,models:state.modelIds.join(','),benches:state.benchIds.join(','),benchmark:state.benchmark,metric:state.metric});
   if(state.query)p.set('q',state.query);if(state.family!=='all')p.set('family',state.family);if(state.category!=='all')p.set('suite',state.category);
   if(state.sortBenchmark){p.set('sortBenchmark',state.sortBenchmark);p.set('sortMetric',state.sortMetric);p.set('direction',state.direction);}
   history.replaceState(null,'',`#${p}`);
 }
 function update(change){
   const focus=document.activeElement,selection=focus?.id==='model-search'?[focus.selectionStart,focus.selectionEnd]:null;
-  const focusAttribute=['data-model','data-benchmark','data-models','data-benches','data-run','data-mode','data-sort-benchmark'].find(attribute=>focus?.hasAttribute(attribute));
+  const focusAttribute=['data-model','data-benchmark','data-models','data-benches','data-run','data-sort-benchmark'].find(attribute=>focus?.hasAttribute(attribute));
   const focusValue=focusAttribute?focus.getAttribute(focusAttribute):null;
   const focusMetric=focus?.getAttribute('data-sort-metric');
   const scroll=$('#content .table-scroll'),position=scroll?[scroll.scrollLeft,scroll.scrollTop]:null;
@@ -81,25 +90,25 @@ function sortedModels(){
 function scoreCell(row,id,b,metric){
   if(!isNumber(row?.pass_at_k))return '<span class="missing" title="No reported result">—</span>';
   const interval=isNumber(row.ci_lower)&&isNumber(row.ci_upper)?` · 95% CI ${percent(row.ci_lower)}–${percent(row.ci_upper)}`:'';
-  return `<button class="score-cell" style="--intensity:${Math.round(3+row.pass_at_k*14)}%" data-detail="${e(id)}" data-detail-benchmark="${e(b.id)}" data-detail-metric="${e(metric)}" title="${e(metricName(metric))}${interval}" aria-label="${e(model(id).name)}, ${e(b.name)}, ${e(metricName(metric))}, ${percent(row.pass_at_k)} percent">${percent(row.pass_at_k)}</button>`;
+  return `<button class="score-cell" data-detail="${e(id)}" data-detail-benchmark="${e(b.id)}" data-detail-metric="${e(metric)}" data-detail-k="${row.k}" data-detail-run="${e(row.run)}" title="${e(metricName(metric))}${interval}" aria-label="${e(model(id).name)}, ${e(b.name)}, ${e(metricName(metric))}, k ${row.k}, ${percent(row.pass_at_k)} percent">${percent(row.pass_at_k)}</button>`;
 }
 function matrix(){
   const ms=sortedModels(),cols=columns();
   if(!ms.length||!cols.length)return '<div class="empty">Select models and benchmarks.</div>';
   const head=cols.map(c=>{const active=state.sortBenchmark===c.benchmark.id&&state.sortMetric===c.metric;return `<th scope="col" class="metric-heading" aria-sort="${active?(state.direction==='asc'?'ascending':'descending'):'none'}"><button data-sort-benchmark="${e(c.benchmark.id)}" data-sort-metric="${e(c.metric)}" title="${e(c.benchmark.name)} · ${e(metricName(c.metric))}"><span>${e(c.benchmark.name)}</span><small>${e(metricName(c.metric))} ${active?(state.direction==='desc'?'↓':'↑'):''}</small></button></th>`;}).join('');
-  return `<div class="table-scroll" tabindex="0" role="region" aria-label="${state.run==='greedy'?'Greedy':'Sample'} score matrix"><table class="matrix"><thead><tr><th scope="col" class="model-column"><button data-sort-model>Model</button></th>${head}</tr></thead><tbody>${ms.map(m=>`<tr data-model-row="${e(m.id)}"><th scope="row" class="model-column"><span class="model-name" title="${e(m.name)}">${e(compactName(m.name))}</span></th>${cols.map(c=>`<td>${scoreCell(rowFor(m.id,c.benchmark.id,state.run,state.k,c.metric),m.id,c.benchmark,c.metric)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+  return `<div class="table-scroll" tabindex="0" role="region" aria-label="Greedy score matrix"><table class="matrix"><thead><tr><th scope="col" class="model-column"><button data-sort-model>Model</button></th>${head}</tr></thead><tbody>${ms.map(m=>`<tr data-model-row="${e(m.id)}"><th scope="row" class="model-column"><span class="model-name" title="${e(m.name)}">${e(compactName(m.name))}</span></th>${cols.map(c=>{const row=rowFor(m.id,c.benchmark.id,'greedy',1,c.metric);return `<td ${heatAttributes(row?.pass_at_k)}>${scoreCell(row,m.id,c.benchmark,c.metric)}</td>`;}).join('')}</tr>`).join('')}</tbody></table></div>`;
 }
-function toolbar(){return `<div class="table-toolbar">${state.run==='sample128'?`<div class="segmented" aria-label="Sample display"><button data-mode="table" class="${state.mode==='table'?'active':''}" aria-pressed="${state.mode==='table'}">Table</button><button data-mode="curves" class="${state.mode==='curves'?'active':''}" aria-pressed="${state.mode==='curves'}">Curves</button></div><label>k <select id="k-select" aria-label="Sampling budget">${KS.map(k=>option(k,k,state.k)).join('')}</select></label>`:''}${state.run==='greedy'||state.mode==='table'?`<label>Metrics <select id="metric-mode" aria-label="Metric display">${option('primary','Primary',state.metricMode)}${option('all','All',state.metricMode)}</select></label>`:''}<span class="results-count">${models().length} models · ${benches().length} benchmarks</span></div>`;}
+function toolbar(){return `<div class="table-toolbar">${state.run==='sample128'?`<label>k <select id="k-select" aria-label="Sampling budget">${KS.map(k=>option(k,k,state.k)).join('')}</select></label>`:`<label>Metrics <select id="metric-mode" aria-label="Metric display">${option('primary','Primary',state.metricMode)}${option('all','All',state.metricMode)}</select></label>`}<span class="results-count">${models().length} models · ${benches().length} benchmarks</span></div>`;}
 function curveData(){return models().map(m=>({id:m.id,color:colors[data.models.findIndex(item=>item.id===m.id)%colors.length],points:KS.map(k=>rowFor(m.id,state.benchmark,'sample128',k)).filter(r=>r&&isNumber(r.pass_at_k))})).filter(s=>s.points.length);}
 function curveChart(){
-  const narrow=matchMedia('(max-width:700px)').matches,series=curveData(),w=narrow?520:1000,h=narrow?280:310,p={l:44,r:20,t:20,b:36},iw=w-p.l-p.r,ih=h-p.t-p.b,x=k=>p.l+Math.log2(k)/7*iw,y=v=>p.t+(1-v)*ih;
+  const narrow=matchMedia('(max-width:700px)').matches,series=curveData(),w=narrow?400:560,h=w,pad=narrow?36:44,p={l:pad,r:pad,t:pad,b:pad},iw=w-p.l-p.r,ih=h-p.t-p.b,x=k=>p.l+Math.log2(k)/7*iw,y=v=>p.t+(1-v)*ih;
   if(!series.length)return '<div class="empty">No sampled results.</div>';
-  return `<svg class="curve-svg" viewBox="0 0 ${w} ${h}" role="group" aria-label="${e(benchmark().name)} sampling scores"><title>${e(benchmark().name)} · ${e(metricName(state.metric))}</title>${[0,.25,.5,.75,1].map(v=>`<line class="curve-grid" x1="${p.l}" x2="${w-p.r}" y1="${y(v)}" y2="${y(v)}"/><text x="${p.l-10}" y="${y(v)+3}" text-anchor="end">${v*100}</text>`).join('')}${KS.map(k=>`<text x="${x(k)}" y="${h-10}" text-anchor="middle">${k}</text>`).join('')}<line x1="${x(state.k)}" x2="${x(state.k)}" y1="${p.t}" y2="${h-p.b}" stroke="var(--line)" stroke-dasharray="4 4"/>${series.map(s=>`<path d="${s.points.map((r,i)=>`${i?'L':'M'}${x(r.k).toFixed(2)},${y(r.pass_at_k).toFixed(2)}`).join(' ')}" fill="none" stroke="${s.color}" stroke-width="1.7"/>${s.points.map(r=>`<circle class="chart-point" cx="${x(r.k)}" cy="${y(r.pass_at_k)}" r="3" fill="var(--panel)" stroke="${s.color}" stroke-width="1.5" tabindex="0" data-point="${e(s.id)}" data-point-k="${r.k}" aria-label="${e(model(s.id).name)}, k ${r.k}, ${percent(r.pass_at_k)} percent"/>`).join('')}`).join('')}</svg>`;
+  return `<svg class="curve-svg" viewBox="0 0 ${w} ${h}" role="group" aria-label="${e(benchmark().name)} sampling scores"><title>${e(benchmark().name)} · ${e(metricName(state.metric))}</title>${[0,.25,.5,.75,1].map(v=>`<line class="curve-grid" x1="${p.l}" x2="${w-p.r}" y1="${y(v)}" y2="${y(v)}"/><text x="${p.l-10}" y="${y(v)+3}" text-anchor="end">${v*100}</text>`).join('')}<path class="curve-axes" d="M${p.l},${p.t}V${h-p.b}H${w-p.r}" fill="none" stroke="var(--muted)"/>${KS.map(k=>`<text x="${x(k)}" y="${h-p.b+20}" text-anchor="middle">${k}</text>`).join('')}<line x1="${x(state.k)}" x2="${x(state.k)}" y1="${p.t}" y2="${h-p.b}" stroke="var(--line)" stroke-dasharray="4 4"/>${series.map(s=>`<path d="${s.points.map((r,i)=>`${i?'L':'M'}${x(r.k).toFixed(2)},${y(r.pass_at_k).toFixed(2)}`).join(' ')}" fill="none" stroke="${s.color}" stroke-width="1.7"/>${s.points.map(r=>`<circle class="chart-point" cx="${x(r.k)}" cy="${y(r.pass_at_k)}" r="3" fill="var(--panel)" stroke="${s.color}" stroke-width="1.5" tabindex="0" data-point="${e(s.id)}" data-point-k="${r.k}" aria-label="${e(model(s.id).name)}, k ${r.k}, ${percent(r.pass_at_k)} percent"/>`).join('')}`).join('')}</svg>`;
 }
 function curves(){
   if(!models().length||!benches().length)return '<div class="empty">Select models and benchmarks.</div>';
   const series=curveData();
-  return `<div class="curve-panel"><div class="curve-controls">${benchmarkSelect()}${metricSelect()}<span class="muted">Score (%) / k</span></div>${curveChart()}<div class="curve-legend">${series.map(s=>`<span class="legend-item"><span class="legend-dot" style="background:${s.color}"></span>${e(compactName(model(s.id).name))}</span>`).join('')}</div></div><div class="table-scroll" tabindex="0" role="region" aria-label="Sampling scores"><table class="curve-table matrix"><thead><tr><th class="model-column" scope="col">Model</th>${KS.map(k=>`<th scope="col">k = ${k}</th>`).join('')}</tr></thead><tbody>${series.map(s=>`<tr data-model-row="${e(s.id)}"><th scope="row" class="model-column"><span class="model-name" title="${e(model(s.id).name)}">${e(compactName(model(s.id).name))}</span></th>${KS.map(k=>{const r=s.points.find(p=>p.k===k);return `<td>${r?`<button class="score-cell" data-detail="${e(s.id)}" data-detail-k="${k}" data-detail-run="sample128">${percent(r.pass_at_k)}</button>`:'—'}</td>`;}).join('')}</tr>`).join('')}</tbody></table></div>`;
+  return `<div class="curve-panel"><div class="curve-controls">${benchmarkSelect()}${metricSelect()}<span class="muted">Score (%) / k</span></div>${curveChart()}<div class="curve-legend">${series.map(s=>`<span class="legend-item"><span class="legend-dot" style="background:${s.color}"></span>${e(compactName(model(s.id).name))}</span>`).join('')}</div></div><div class="table-scroll" tabindex="0" role="region" aria-label="Sampling scores"><table class="curve-table matrix"><thead><tr><th class="model-column" scope="col">Model</th>${KS.map(k=>`<th scope="col">k = ${k}</th>`).join('')}</tr></thead><tbody>${series.map(s=>`<tr data-model-row="${e(s.id)}"><th scope="row" class="model-column"><span class="model-name" title="${e(model(s.id).name)}">${e(compactName(model(s.id).name))}</span></th>${KS.map(k=>{const r=s.points.find(p=>p.k===k);return `<td ${heatAttributes(r?.pass_at_k)}>${scoreCell(r,s.id,benchmark(),state.metric)}</td>`;}).join('')}</tr>`).join('')}</tbody></table></div>`;
 }
 function render(){
   $('#chart-tooltip').hidden=true;
@@ -107,17 +116,17 @@ function render(){
   $('#page-title').textContent=state.run==='greedy'?'Greedy':'Sample';
   const parameters=data.sources.find(s=>s.id===state.run).parameters;
   $('#run-meta').textContent=`n = ${parameters.n} · T = ${parameters.temperature}`;
-  $('#content').innerHTML=`${selectionPanels()}<section class="results-panel" aria-label="Results">${toolbar()}${state.run==='sample128'&&state.mode==='curves'?curves():matrix()}<div class="table-footer"><span>Score (%) · — missing</span><a href="data/dashboard.json" download="edgeinstant-results.json">JSON ↓</a></div></section>`;
+  $('#content').innerHTML=`${selectionPanels()}<section class="results-panel" aria-label="Results">${toolbar()}${state.run==='sample128'?curves():matrix()}<div class="table-footer"><span class="score-scale" aria-label="Score color scale: 0 to 100 percent"><span>0</span><span class="score-gradient" aria-hidden="true"></span><span>100%</span><span>· — missing</span></span><a href="data/dashboard.json" download="edgeinstant-results.json">JSON ↓</a></div></section>`;
 }
 function toggleList(key,id){update({[key]:state[key].includes(id)?state[key].filter(item=>item!==id):[...state[key],id]});}
 function exportRows(){
-  if(state.run==='sample128'&&state.mode==='curves')return benches().length?curveData().flatMap(s=>s.points):[];
+  if(state.run==='sample128')return benches().length?curveData().flatMap(s=>s.points):[];
   return models().flatMap(m=>columns().map(c=>rowFor(m.id,c.benchmark.id,state.run,state.k,c.metric)).filter(Boolean));
 }
 function download(rows){
   if(!rows.length){notify('No results selected.');return;}
   const fields=[...new Set(rows.flatMap(r=>Object.keys(r)))],url=URL.createObjectURL(new Blob(['\ufeff'+csv(rows,fields)],{type:'text/csv;charset=utf-8'})),a=document.createElement('a');
-  a.href=url;a.download=`edgeinstant-${state.run}-${state.run==='sample128'&&state.mode==='curves'?'curves':`k${state.run==='greedy'?1:state.k}`}.csv`;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);notify(`${rows.length} rows exported.`);
+  a.href=url;a.download=`edgeinstant-${state.run}-${state.run==='sample128'?'curves':'k1'}.csv`;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);notify(`${rows.length} rows exported.`);
 }
 
 async function showDetails(id, bId=state.benchmark, metric=state.metric, run=state.run, k=state.k) {
@@ -139,7 +148,7 @@ function renderBreakdowns(rows) {
  const groups=[...new Set(rows.map(r=>r.group_by))];
  if(!groups.length){$('#breakdown-content').innerHTML='<div class="notice">No breakdown.</div>';return;}
  $('#breakdown-content').innerHTML=`<div class="breakdown-controls"><h3>Breakdown</h3><select id="breakdown-group" aria-label="Breakdown grouping">${groups.map(g=>option(g,g.replace(/_/g,' '),groups[0])).join('')}</select></div><div id="breakdown-table" class="breakdown-table"></div><p class="muted" style="font-size:10px;margin-top:9px">Units = group denominator</p>`;
- const draw=()=>{const selected=rows.filter(r=>r.group_by===$('#breakdown-group').value).sort((a,b)=>(b.pass_at_k??-1)-(a.pass_at_k??-1));$('#breakdown-table').innerHTML=`<table aria-label="Subject breakdown scores"><thead><tr><th scope="col">GROUP</th><th scope="col">SCORE %</th><th scope="col">UNITS</th></tr></thead><tbody>${selected.map(r=>`<tr><td>${e(r.group)}</td><td>${percent(r.pass_at_k)}</td><td>${number(r.n_units)}</td></tr>`).join('')}</tbody></table>`;};draw();$('#breakdown-group').addEventListener('change',draw);
+ const draw=()=>{const selected=rows.filter(r=>r.group_by===$('#breakdown-group').value).sort((a,b)=>(b.pass_at_k??-1)-(a.pass_at_k??-1));$('#breakdown-table').innerHTML=`<table aria-label="Subject breakdown scores"><thead><tr><th scope="col">GROUP</th><th scope="col">SCORE %</th><th scope="col">UNITS</th></tr></thead><tbody>${selected.map(r=>`<tr><td>${e(r.group)}</td><td ${heatAttributes(r.pass_at_k)}>${percent(r.pass_at_k)}</td><td>${number(r.n_units)}</td></tr>`).join('')}</tbody></table>`;};draw();$('#breakdown-group').addEventListener('change',draw);
 }
 function showPoint(element){
   const row=rowFor(element.dataset.point,state.benchmark,'sample128',Number(element.dataset.pointK));if(!row)return;
@@ -154,7 +163,6 @@ document.addEventListener('click',event=>{
   else if(t.hasAttribute('data-benchmark'))toggleList('benchIds',t.dataset.benchmark);
   else if(t.dataset.models)update({modelIds:t.dataset.models==='all'?data.models.map(m=>m.id):[]});
   else if(t.dataset.benches)update({benchIds:t.dataset.benches==='all'?data.benchmarks.map(b=>b.id):[]});
-  else if(t.dataset.mode)update({mode:t.dataset.mode});
   else if(t.dataset.sortBenchmark)update({sortBenchmark:t.dataset.sortBenchmark,sortMetric:t.dataset.sortMetric,direction:state.sortBenchmark===t.dataset.sortBenchmark&&state.sortMetric===t.dataset.sortMetric&&state.direction==='desc'?'asc':'desc'});
   else if(t.hasAttribute('data-sort-model'))update({sortBenchmark:'',sortMetric:''});
   else if(t.dataset.detail)showDetails(t.dataset.detail,t.dataset.detailBenchmark||state.benchmark,t.dataset.detailMetric||state.metric,t.dataset.detailRun||state.run,t.dataset.detailK?Number(t.dataset.detailK):state.k);

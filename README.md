@@ -19,7 +19,7 @@ Open **http://localhost:8765**. Use HTTP rather than opening `index.html` direct
 ## Explore
 
 - **Greedy:** a sortable score matrix. Select models and benchmarks with chips; filter by suite, family, or name. Switch between primary and all metrics. Click a score for source details and subject breakdowns.
-- **Sample:** the same matrix for k = 1, 2, 4, 8, 16, 32, 64, or 128, plus sampling curves for the selected models. Chart points support hover and keyboard focus.
+- **Sample:** square pass@k curves with the corresponding table below, covering k = 1, 2, 4, 8, 16, 32, 64, and 128. Select models, a benchmark, and a metric. Chart points support hover and keyboard focus.
 
 CSV export follows the displayed models, benchmarks, metrics, and sampling budgets. Shared URLs preserve selections and filters. Use `/` to focus model search and `Escape` to close result details. Light/dark appearance is stored locally. Wide result tables scroll within their panels on narrow screens.
 

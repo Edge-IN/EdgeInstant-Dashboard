@@ -59,6 +59,76 @@ def run(url: str, artifact_dir: Path) -> None:
                     else:
                         assert abs(float(text) - source["pass_at_k"] * 100) <= 0.051, (source, text)
 
+        heatmap_colors = {}
+
+        def check_table_styles(target, selector="table.matrix"):
+            cells = target.locator(f"{selector} th, {selector} td")
+            assert cells.count(), f"No table cells in {selector}"
+            assert cells.evaluate_all("""cells => cells.every(cell => {
+                const style = getComputedStyle(cell);
+                return style.textAlign === 'center' && style.verticalAlign === 'middle';
+            })"""), "Table headers and values must be centered"
+            colored = target.locator(f"{selector} td.score-heat")
+            assert colored.count(), "Numeric scores need heatmap colors"
+            values = colored.evaluate_all("""cells => cells.map(cell => {
+                const button = cell.querySelector('.score-cell');
+                return {
+                    color: getComputedStyle(cell).backgroundColor,
+                    value: parseFloat(cell.textContent),
+                    key: button ? [button.dataset.detail, button.dataset.detailBenchmark,
+                        button.dataset.detailMetric, button.dataset.detailK].join('|') : null,
+                    centered: !button || getComputedStyle(button).textAlign === 'center'
+                };
+            })""")
+            for value in values:
+                assert value["centered"]
+                assert value["color"] not in ("transparent", "rgba(0, 0, 0, 0)")
+                if selector == "table.matrix" and target.locator("#page-title").inner_text() == "Greedy":
+                    key = value["key"]
+                    assert heatmap_colors.setdefault(key, value["color"]) == value["color"], "A score changed color after filtering or theme changes"
+            neutral = target.locator(f"{selector} td:has(.missing)")
+            assert neutral.evaluate_all("cells => cells.every(cell => !cell.classList.contains('score-heat'))"), "Missing values must not receive score colors"
+            return values
+
+        def check_square_plot(target):
+            dimensions = target.locator(".curve-svg").evaluate("""svg => {
+                const grids = [...svg.querySelectorAll('.curve-grid')].filter(line =>
+                    line.y1.baseVal.value === line.y2.baseVal.value &&
+                    line.x1.baseVal.value !== line.x2.baseVal.value);
+                const first = grids[0], ys = grids.map(line => line.y1.baseVal.value);
+                const matrix = svg.getScreenCTM();
+                return {
+                    width: Math.abs(first.x2.baseVal.value - first.x1.baseVal.value) * Math.hypot(matrix.a, matrix.b),
+                    height: (Math.max(...ys) - Math.min(...ys)) * Math.hypot(matrix.c, matrix.d)
+                };
+            }""")
+            assert dimensions["width"] > 200, dimensions
+            assert abs(dimensions["width"] - dimensions["height"]) <= 1, dimensions
+
+        def check_curve_table():
+            bench = page.locator(".benchmark-select").input_value()
+            metric = page.locator(".metric-select").input_value()
+            actual = page.locator("table.curve-table tbody tr").evaluate_all("""rows => rows.map(row => ({
+                model: row.dataset.modelRow,
+                cells: [...row.querySelectorAll('td')].map(cell => cell.textContent.trim())
+            }))""")
+            budgets = [1, 2, 4, 8, 16, 32, 64, 128]
+            expect(page.locator("table.curve-table thead th")).to_have_count(9)
+            assert actual
+            for row in actual:
+                assert len(row["cells"]) == len(budgets)
+                for k, text in zip(budgets, row["cells"]):
+                    source = sources.get(("sample128", row["model"], bench, metric, k))
+                    if source is None or source["pass_at_k"] is None:
+                        assert text == "—"
+                    else:
+                        assert abs(float(text) - source["pass_at_k"] * 100) <= 0.051, (source, text)
+            assert page.locator(".curve-panel").evaluate(
+                "panel => !!(panel.compareDocumentPosition(document.querySelector('.curve-table')) & Node.DOCUMENT_POSITION_FOLLOWING)"
+            ), "Sampling table must follow its plot"
+            check_table_styles(page)
+            check_square_plot(page)
+
         def export_rows():
             with page.expect_download() as download_info:
                 page.locator("#export").click()
@@ -87,6 +157,15 @@ def run(url: str, artifact_dir: Path) -> None:
         expected_models = {r["model_id"] for r in data["rows"] + data["coverage"] if r["run"] == "greedy"}
         assert set(selected_models()) == expected_models == set(model_ids())
         check_matrix()
+        heatmap = check_table_styles(page)
+        assert len({cell["color"] for cell in heatmap}) > 5, "Scores need a range of heatmap colors"
+        low, high = min(heatmap, key=lambda cell: cell["value"]), max(heatmap, key=lambda cell: cell["value"])
+        def rgb(color):
+            return [int(channel.strip()) for channel in color.removeprefix("rgb(").removesuffix(")").split(",")]
+        low_rgb, high_rgb = rgb(low["color"]), rgb(high["color"])
+        assert low_rgb[2] > low_rgb[1] and low_rgb[0] > low_rgb[1], low
+        assert high_rgb[0] > high_rgb[2] and high_rgb[1] > high_rgb[2], high
+        checks.append("Centered score tables use a fixed viridis heatmap, with distinct low/high colors and neutral missing cells")
         assert not breakdown_requests, "Breakdown assets must load only when opening details"
         page.screenshot(path=str(artifact_dir / "greedy-desktop.png"), full_page=True)
         checks.append("Greedy opens directly with the full source-accurate matrix, two run tabs, Times New Roman headings, and no slogans or methodology")
@@ -101,6 +180,10 @@ def run(url: str, artifact_dir: Path) -> None:
         expect(page.locator("#detail-content")).to_contain_text(source["evaluation_id"])
         expect(page.locator("#breakdown-content .loading")).to_have_count(0)
         assert breakdown_requests, "Result details did not request their subject breakdowns"
+        check_table_styles(page, "#breakdown-table table")
+        assert page.locator("#breakdown-table td:nth-child(3)").evaluate_all(
+            "cells => cells.every(cell => !cell.classList.contains('score-heat'))"
+        ), "Unit counts must not use the percentage heatmap"
         page.keyboard.press("Escape")
         expect(page.locator("#detail-dialog")).not_to_be_visible()
         checks.append("Matrix cells open the matching evaluation and lazy subject breakdowns; Escape closes details")
@@ -126,6 +209,7 @@ def run(url: str, artifact_dir: Path) -> None:
             page.locator(f'.benchmark-chip[data-benchmark="{bench}"]').click()
         assert set(map(tuple, columns())) == {("ai2d", "accuracy"), ("hallusionbench", "Avg")}
         check_matrix()
+        check_table_styles(page)
         check_export("greedy", set(ids), set(map(tuple, columns())), {1})
         page.locator("#metric-mode").select_option("all")
         assert len(columns()) == 5
@@ -179,25 +263,36 @@ def run(url: str, artifact_dir: Path) -> None:
 
         page.locator('#navigation [data-run="sample128"]').click()
         expect(page.locator("#page-title")).to_have_text("Sample")
+        expect(page.locator(".curve-svg")).to_be_visible()
+        expect(page.locator(".curve-table")).to_be_attached()
+        expect(page.locator("[data-mode]")).to_have_count(0)
+        expect(page.locator("#metric-mode")).to_have_count(0)
+        check_curve_table()
         expect(page.locator("#k-select")).to_be_visible()
         page.locator("#k-select").select_option("128")
-        check_matrix("sample128", 128)
+        check_curve_table()
         page.locator('[data-models="none"]').click()
+        page.locator("#export").click()
+        expect(page.locator("#toast")).to_have_text("No results selected.")
         for model_id in ids:
             page.locator(f'.model-chip[data-model="{model_id}"]').click()
         page.locator('[data-benches="none"]').click()
+        expect(page.locator(".curve-svg")).to_have_count(0)
         page.locator('.benchmark-chip[data-benchmark="hallusionbench"]').click()
-        page.locator("#metric-mode").select_option("all")
-        check_matrix("sample128", 128)
-        check_export("sample128", set(ids), set(map(tuple, columns())), {128})
-        page.reload(wait_until="networkidle")
-        expect(page.locator("#k-select")).to_have_value("128")
-        check_matrix("sample128", 128)
-        checks.append("Sample matrix faithfully displays selected k, models and metrics; CSV and reload retain the same selection")
-
-        page.locator('[data-mode="curves"]').click()
         page.locator(".benchmark-select").select_option("hallusionbench")
         page.locator(".metric-select").select_option("qAcc")
+        check_curve_table()
+        check_export("sample128", set(ids), {("hallusionbench", "qAcc")}, {1, 2, 4, 8, 16, 32, 64, 128})
+        page.reload(wait_until="networkidle")
+        expect(page.locator("#k-select")).to_have_value("128")
+        expect(page.locator(".metric-select")).to_have_value("qAcc")
+        check_curve_table()
+        page.goto(page.url + "&mode=table", wait_until="networkidle")
+        expect(page.locator(".curve-svg")).to_be_visible()
+        expect(page.locator("[data-mode]")).to_have_count(0)
+        check_curve_table()
+        checks.append("Sample opens a square pass@k plot above its source-accurate eight-budget table, including legacy table URLs and exact filtered CSV")
+
         points = page.locator(".chart-point")
         assert points.count() == len(ids) * 8
         points.first.focus()
@@ -208,6 +303,16 @@ def run(url: str, artifact_dir: Path) -> None:
         displayed_ids = set(points.evaluate_all("els => els.map(el => el.dataset.point)"))
         expected_ids = {r["model_id"] for r in data["rows"] if r["run"] == "sample128" and r["benchmark"] == "hallusionbench" and r["metric"] == "qAcc" and r["pass_at_k"] is not None}
         assert displayed_ids == expected_ids and len(displayed_ids) > 6
+        check_curve_table()
+        sample_cell = page.locator('.curve-table .score-cell[data-detail-k="128"]').first
+        sample_id = sample_cell.get_attribute("data-detail")
+        sample_cell.click()
+        expect(page.locator("#detail-dialog")).to_be_visible()
+        expect(page.locator("#detail-content")).to_contain_text(sources[("sample128", sample_id, "hallusionbench", "qAcc", 128)]["evaluation_id"])
+        expect(page.locator("#detail-content .badge")).to_contain_text("k = 128")
+        expect(page.locator("#breakdown-content .loading")).to_have_count(0)
+        page.keyboard.press("Escape")
+        page.evaluate("window.scrollTo(0, 0); document.activeElement?.blur()")
         page.screenshot(path=str(artifact_dir / "sample-curves-desktop.png"), full_page=True)
         page.reload(wait_until="networkidle")
         expect(page.locator(".metric-select")).to_have_value("qAcc")
@@ -219,6 +324,7 @@ def run(url: str, artifact_dir: Path) -> None:
         expect(page.locator("html")).to_have_attribute("data-theme", "dark")
         page.reload(wait_until="networkidle")
         expect(page.locator("html")).to_have_attribute("data-theme", "dark")
+        check_table_styles(page)
         page.screenshot(path=str(artifact_dir / "greedy-dark.png"), full_page=True)
         checks.append("Dark theme persists after reload")
 
@@ -240,8 +346,11 @@ def run(url: str, artifact_dir: Path) -> None:
         expect(phone.locator("#breakdown-content .loading")).to_have_count(0)
         phone.locator("[data-close]").click()
         phone.locator('#navigation [data-run="sample128"]').click()
-        phone.locator('[data-mode="curves"]').click()
         expect(phone.locator(".curve-svg")).to_be_visible()
+        expect(phone.locator(".curve-table")).to_be_attached()
+        expect(phone.locator("[data-mode]")).to_have_count(0)
+        check_square_plot(phone)
+        check_table_styles(phone)
         assert not phone.evaluate("document.documentElement.scrollWidth > window.innerWidth")
         phone.screenshot(path=str(artifact_dir / "sample-curves-mobile.png"), full_page=True)
         mobile_axis_size = phone.locator(".curve-svg text").first.evaluate("el => parseFloat(getComputedStyle(el).fontSize) * el.getScreenCTM().a")
