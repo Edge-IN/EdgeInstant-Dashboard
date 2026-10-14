@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#13765e">
+  <meta name="description" content="Explore EdgeInstant evaluation results, compare models, and understand performance across benchmarks and sampling budgets.">
+  <title>EdgeInstant · Evaluation workspace</title>
+  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+  <link rel="stylesheet" href="styles.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to results</a>
+  <aside class="sidebar" aria-label="Workspace navigation">
+    <a class="brand" href="#overview" aria-label="EdgeInstant overview"><svg width="30" height="32" viewBox="0 0 30 32" fill="none" aria-hidden="true"><path d="M4 4H27L17 14H26L8 29L12 18H3L11 10H4V4Z" fill="currentColor"/></svg><span>EdgeInstant<span class="brand-sub">EVALUATION WORKSPACE</span></span></a>
+    <div class="workspace-label"><span class="workspace-avatar">EI</span><div>Model evaluation<small>Research workspace</small></div><span class="live-dot"></span></div>
+    <div class="nav-caption">EXPLORE</div>
+    <nav id="navigation"></nav>
+    <div class="sidebar-note"><span class="note-icon">↗</span><strong>From evidence to insight.</strong><p>Compare capabilities.<br>Understand the trade-offs.</p><button class="text-button" data-view="methodology">About these results <span>→</span></button></div>
+    <div class="sidebar-bottom"><span class="live-dot"></span><div>Report snapshot<small id="snapshot-date">Loading sources…</small></div><button class="icon-button" id="theme-toggle" aria-label="Switch to dark theme" title="Switch theme"></button></div>
+  </aside>
+  <div class="workspace">
+    <header class="topbar"><div class="breadcrumb">Workspace <span>/</span> <strong id="breadcrumb">Overview</strong></div><div class="topbar-actions"><span class="source-badge"><span class="live-dot"></span> EdgeInstant-Eval</span><button id="mobile-theme" class="icon-button mobile-theme" aria-label="Switch to dark theme" title="Switch theme"></button><button id="share" class="button compact" title="Copy a link to this view">Copy view <span aria-hidden="true">↗</span></button></div></header>
+    <main id="main" tabindex="-1">
+      <div class="page-heading"><div><div class="eyebrow">THE EVALUATION LAB</div><h1 id="page-title">Evaluation overview</h1><p id="page-description">Every model. Every benchmark. A clearer perspective.</p></div><button class="button" id="export"><span aria-hidden="true">↓</span> Export results</button></div>
+      <section class="control-bar" aria-label="Evaluation controls"><div class="run-switch" id="run-switch"></div><div class="control-right"><label id="k-control">Sampling budget <select id="k-select" aria-label="Sampling budget"></select></label><span class="control-separator"></span><label>Suite <select id="category-select" aria-label="Benchmark suite"><option value="all">All benchmarks</option><option value="text">Text reasoning</option><option value="vision">Vision</option><option value="instruction">Instruction following</option></select></label></div></section>
+      <div id="content" aria-live="polite"><div class="loading"><span class="spinner"></span> Loading evaluation reports…</div></div>
+      <footer class="page-footer"><span><span class="small-brand">ϟ</span> EdgeInstant <span class="footer-divider">/</span> Built for a closer look.</span><button class="text-button" data-view="methodology">Source &amp; methodology <span>↗</span></button></footer>
+    </main>
+  </div>
+  <div id="toast" role="status"></div>
+  <dialog id="detail-dialog" aria-labelledby="detail-title"><div id="detail-content"></div></dialog>
+  <div id="chart-tooltip" class="chart-tooltip" role="tooltip" hidden></div>
+  <noscript><p class="noscript">Enable JavaScript to explore this dashboard. The source data is available in <a href="data/dashboard.json">dashboard.json</a>.</p></noscript>
+</body>
+</html>

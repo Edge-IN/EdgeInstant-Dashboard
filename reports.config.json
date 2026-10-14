@@ -1,0 +1,18 @@
+{
+  "evalRoot": "../EdgeInstant-Eval",
+  "output": "site/data",
+  "runs": [
+    {
+      "id": "greedy",
+      "label": "Greedy",
+      "path": "results/reports/greedy_n1_t0.0_p1.0_tk0_rp1.0_s20260929_mcq64_if4096_vis256_k1",
+      "parameters": {"n": 1, "temperature": 0.0, "topP": 1.0, "topK": 0, "repetitionPenalty": 1.0, "seed": 20260929}
+    },
+    {
+      "id": "sample128",
+      "label": "Sample 128",
+      "path": "results/reports/sample_n128_t1.0_p1.0_tk0_rp1.0_s20260918_mcq64_if4096_vis256_k1-2.4.8.16.32.64.128",
+      "parameters": {"n": 128, "temperature": 1.0, "topP": 1.0, "topK": 0, "repetitionPenalty": 1.0, "seed": 20260918}
+    }
+  ]
+}
