@@ -4,7 +4,7 @@ A minimalist, interactive evaluation workspace for EdgeInstant-Eval. The include
 
 The site uses native JavaScript, CSS, and SVG. Importing and serving require only **Python 3.10+**. There is no Node dependency, build step, database, CDN, or external font requirement.
 
-**GitHub Pages is ready:** follow [GITHUB_PAGES.md](GITHUB_PAGES.md) to upload to **https://edge-in.github.io/EdgeInstant-Dashboard/**. The included workflow publishes `site/` on pushes to `main`; nothing has been uploaded during preparation.
+**GitHub Pages:** **https://edge-in.github.io/EdgeInstant-Dashboard/**. The included workflow publishes `site/` on pushes to `main`. See [GITHUB_PAGES.md](GITHUB_PAGES.md) for upload and update commands.
 
 ## Run locally
 
@@ -18,13 +18,10 @@ Open **http://localhost:8765**. Use HTTP rather than opening `index.html` direct
 
 ## Explore
 
-- **Overview:** per-benchmark leaders, sampled scaling curves, sortable model rankings, confidence intervals, and descriptive sample-versus-greedy differences.
-- **Benchmarks:** switch between ranking and a scrollable score matrix; filter by suite, family, or model name. Click a score to inspect its provenance and lazy-loaded subject breakdowns.
-- **Sampling analysis:** pin up to six models and compare k = 1, 2, 4, 8, 16, 32, 64, and 128. Chart points support hover and keyboard focus.
-- **Run health:** see source coverage gaps, excluded evaluations, invalid answers, and truncation rates.
-- **Methodology:** metric definitions, source settings, dates, and the imported JSON download.
+- **Greedy:** a sortable score matrix. Select models and benchmarks with chips; filter by suite, family, or name. Switch between primary and all metrics. Click a score for source details and subject breakdowns.
+- **Sample:** the same matrix for k = 1, 2, 4, 8, 16, 32, 64, or 128, plus sampling curves for the selected models. Chart points support hover and keyboard focus.
 
-CSV export follows the current view. **Copy view** includes filters, benchmark, metric, sampling budget, table mode, sorting, and selected models in the URL. Use `/` to focus model search and `Escape` to close result details. Light/dark appearance is stored locally. The layout adapts to narrow screens; wide result tables scroll within their panels.
+CSV export follows the displayed models, benchmarks, metrics, and sampling budgets. Shared URLs preserve selections and filters. Use `/` to focus model search and `Escape` to close result details. Light/dark appearance is stored locally. Wide result tables scroll within their panels on narrow screens.
 
 ## Refresh the data
 

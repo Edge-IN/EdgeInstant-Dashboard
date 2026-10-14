@@ -6,7 +6,7 @@ GitHub repository: **Edge-IN/EdgeInstant-Dashboard**
 
 The workflow in [.github/workflows/pages.yml](.github/workflows/pages.yml) checks the importer and included data, then publishes **only `site/`**. It runs on pushes to `main` and can also be started manually. The source code, report import tools, and configuration stay in the repository; the website artifact contains the static application and its imported results.
 
-The imported snapshot is included, so publishing does not need EdgeInstant-Eval, GPUs, Python packages, Node packages, or a build step. No upload or deployment has been performed during preparation.
+The imported snapshot is included, so publishing does not need EdgeInstant-Eval, GPUs, Python packages, Node packages, or a build step.
 
 ## First upload to a new, empty repository
 
