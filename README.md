@@ -60,6 +60,8 @@ The importer also accepts `--config /path/to/config.json` and `--output /path/to
 
 The importer reads `analysis/summary.csv`, `selected.csv`, `excluded.csv`, `coverage_gaps.csv`, `execution.csv`, and `breakdowns.csv`. It streams the breakdowns and **does not read the multi-gigabyte summary JSON or question diagnostics**. It never writes to EdgeInstant-Eval.
 
+Model selectors include only models with summary results in that run. Coverage gaps and excluded evaluations remain in the JSON as audit metadata; they do not add model choices. A model appears automatically after its results are imported.
+
 Malformed numeric values, duplicate result keys, mismatched evaluation provenance, wrong sampling settings, missing primary metrics, and missing source files fail with an actionable error. The importer also rejects source files that change during the import. The previous `dashboard.json` stays intact on a failed import. Breakdown assets receive content-specific filenames and are written before the manifest is atomically replaced, keeping existing open views consistent during an update. Old breakdown assets remain available; for a clean deployment, import into a fresh `data` directory and deploy the complete site together.
 
 The initial payload is approximately 5 MiB. Subject breakdown files are requested only when opening result details. The site retains previous breakdown assets for open views; run `make check-site` to see the current bundle size.

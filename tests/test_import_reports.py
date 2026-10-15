@@ -110,6 +110,33 @@ class ImportReportsTest(unittest.TestCase):
         data = self.build()
         self.assertIsNone(data["rows"][0]["pass_at_k"])
 
+    def test_registry_uses_summary_models_and_preserves_metadata_only_models(self):
+        coverage = [
+            {"setting_id": "setting-a", "model_id": "coverage-only", "benchmark": "ocrbench",
+             "reason": "No evaluation selected"},
+            {"setting_id": "setting-a", "model_id": self.summary["model_id"], "benchmark": "ai2d",
+             "reason": "Missing benchmark"},
+        ]
+        excluded = [
+            {"setting_id": "setting-a", "model_id": "excluded-only", "benchmark": "ocrbench",
+             "evaluation_id": "setting-a/excluded-only/vision/2026-09-01/0001",
+             "reason": "Incomplete evaluation", "status": "incomplete"},
+        ]
+        self.write_csv("coverage_gaps.csv", coverage)
+        self.write_csv("excluded.csv", excluded)
+        for score, expected_score in (("0.72", 0.72), ("0", 0.0), ("", None)):
+            with self.subTest(score=score):
+                self.summary["pass_at_k"] = score
+                self.write_csv("summary.csv", [self.summary])
+                data = self.build()
+                self.assertEqual(data["models"], [{
+                    "id": self.summary["model_id"], "name": self.summary["model_name"],
+                    "family": "EdgeInstant",
+                }])
+                self.assertEqual(data["rows"][0]["pass_at_k"], expected_score)
+                self.assertCountEqual(data["coverage"], [{**row, "run": "greedy"} for row in coverage])
+                self.assertEqual(data["excluded"], [{**row, "run": "greedy"} for row in excluded])
+
     def test_breakdown_is_separate_and_content_addressed(self):
         data = self.build()
         url = data["breakdownFiles"]["greedy"]["ocrbench"]

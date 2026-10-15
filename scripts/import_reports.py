@@ -356,8 +356,8 @@ def build(config_path=DEFAULT_CONFIG, eval_root=None, output=None):
                         pair = (result["model_id"], result["benchmark"])
                         if result["evaluation_id"] != selection[pair]:
                             raise ImportFailure(f"{root}: selected/summary evaluation_id differs for {pair!r}")
-                for row in metadata:
-                    model_names.setdefault(row["model_id"], row.get("model_name") or row["model_id"])
+                # Audit metadata can reference prepared or excluded evaluations.
+                # Only summary rows establish entries in the model catalog.
             execution = unique_rows(root / "execution.csv", run, ("setting_id", "evaluation_id", "model_id"),
                                     ("evaluation_id",))
             payload["execution"].extend(compact_execution(row) for row in execution)

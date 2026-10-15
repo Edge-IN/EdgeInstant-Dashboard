@@ -40,6 +40,19 @@ def run(url: str, artifact_dir: Path) -> None:
         def selected_models():
             return page.locator('.model-chip[aria-pressed="true"]').evaluate_all("chips => chips.map(chip => chip.dataset.model)")
 
+        def check_model_chips(run_id):
+            expected = {row["model_id"] for row in data["rows"] if row["run"] == run_id}
+            actual = set(page.locator(".model-chip").evaluate_all(
+                "chips => chips.map(chip => chip.dataset.model)"
+            ))
+            metadata_only = {
+                row["model_id"] for row in data["coverage"] + data["excluded"]
+                if row["run"] == run_id
+            } - expected
+            assert not actual & metadata_only, f"Metadata-only models shown: {actual & metadata_only}"
+            assert actual == expected, {"missing": expected - actual, "unexpected": actual - expected}
+            return expected
+
         def columns():
             return page.locator("table.matrix [data-sort-benchmark]").evaluate_all("buttons => buttons.map(button => [button.dataset.sortBenchmark, button.dataset.sortMetric])")
 
@@ -154,7 +167,7 @@ def run(url: str, artifact_dir: Path) -> None:
         for removed in ("from evidence to insight", "compare capabilities", "understand the trade-offs", "about these results", "methodology", "the value of another try", "more samples, more possibility"):
             assert removed not in body, removed
         assert len(columns()) == len(data["benchmarks"])
-        expected_models = {r["model_id"] for r in data["rows"] + data["coverage"] if r["run"] == "greedy"}
+        expected_models = check_model_chips("greedy")
         assert set(selected_models()) == expected_models == set(model_ids())
         check_matrix()
         heatmap = check_table_styles(page)
@@ -169,6 +182,23 @@ def run(url: str, artifact_dir: Path) -> None:
         assert not breakdown_requests, "Breakdown assets must load only when opening details"
         page.screenshot(path=str(artifact_dir / "greedy-desktop.png"), full_page=True)
         checks.append("Greedy opens directly with the full source-accurate matrix, two run tabs, Times New Roman headings, and no slogans or methodology")
+
+        summary_ids = {row["model_id"] for row in data["rows"]}
+        stale_ids = sorted({
+            row["model_id"] for row in data["coverage"] + data["excluded"]
+        } - summary_ids)
+        if stale_ids:
+            retained_id = min(expected_models)
+            page.goto(url.rstrip("/") + "/#run=greedy&models=" + ",".join([retained_id, *stale_ids]),
+                      wait_until="networkidle")
+            check_model_chips("greedy")
+            assert set(selected_models()) == {retained_id}
+            assert set(model_ids()) == {retained_id}
+            check_matrix()
+            page.reload(wait_until="networkidle")
+            assert set(selected_models()) == {retained_id}
+            checks.append("Shared URLs with metadata-only models retain valid selections and never display phantom models")
+            reset()
 
         cell = page.locator("table.matrix .score-cell[data-detail]").first
         model_id = cell.get_attribute("data-detail")
@@ -263,6 +293,8 @@ def run(url: str, artifact_dir: Path) -> None:
 
         page.locator('#navigation [data-run="sample128"]').click()
         expect(page.locator("#page-title")).to_have_text("Sample")
+        check_model_chips("sample128")
+        checks.append("Model chips include only summary results for their run; coverage-only and excluded-only models stay hidden")
         expect(page.locator(".curve-svg")).to_be_visible()
         expect(page.locator(".curve-table")).to_be_attached()
         expect(page.locator("[data-mode]")).to_have_count(0)

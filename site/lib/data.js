@@ -11,7 +11,7 @@ export function indexData(data) {
 }
 export function lookup(index, run, model, benchmark, metric, k) { return index.rows.get([run,model,benchmark,metric,k].join('|')); }
 export function availableModels(data, run, category = 'all', query = '', family = 'all') {
-  const ids = new Set([...data.rows, ...(data.coverage || [])].filter(row => row.run === run && (category === 'all' || data.benchmarks.find(b=>b.id===row.benchmark)?.category === category)).map(row=>row.model_id));
+  const ids = new Set(data.rows.filter(row => row.run === run && (category === 'all' || data.benchmarks.find(b=>b.id===row.benchmark)?.category === category)).map(row=>row.model_id));
   return data.models.filter(model=>ids.has(model.id) && (family === 'all' || model.family === family) && `${model.name} ${model.id}`.toLowerCase().includes(query.toLowerCase()));
 }
 export function benchmarkRows(data, state) {
