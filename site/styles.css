@@ -140,8 +140,8 @@ td.score-heat .score-cell:hover, td.score-heat .score-cell:focus-visible { backg
 .curve-panel { min-width: 0; padding-top: 2px; }
 .curve-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
 .benchmark-select, .metric-select { max-width: 260px; }
-.curve-wrap { position: relative; width: 100%; max-width: 680px; margin: 0 auto; }
-.curve-svg { display: block; width: 100%; max-width: 680px; height: auto; aspect-ratio: 1; margin: 0 auto; overflow: visible; }
+.curve-wrap { position: relative; width: 100%; max-width: 1000px; margin: 0 auto; }
+.curve-svg { display: block; width: 100%; max-width: 1000px; height: auto; aspect-ratio: 1; margin: 0 auto; overflow: visible; }
 .curve-svg text { fill: var(--muted); font: 10px Arial, Helvetica, sans-serif; }
 .curve-grid { stroke: var(--chart-grid); stroke-dasharray: 3 4; }
 .chart-point { cursor: crosshair; outline-offset: 2px; }
