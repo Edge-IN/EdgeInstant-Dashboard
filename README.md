@@ -1,6 +1,6 @@
 # EdgeInstant Dashboard
 
-A minimalist, interactive evaluation workspace for EdgeInstant-Eval. The included snapshot contains **14 models, 18 benchmarks, and 2,603 score observations** across the requested greedy and sample-128 reports. Each run has 13 evaluated models; the model sets differ.
+A minimalist, interactive evaluation workspace for EdgeInstant-Eval. The included snapshot contains **16 evaluated models, 18 benchmarks, and 3,035 score observations** across the requested greedy and sample-128 reports. Each run has 15 evaluated models; the model sets differ.
 
 The site uses native JavaScript, CSS, and SVG. Importing and serving require only **Python 3.10+**. There is no Node dependency, build step, database, CDN, or external font requirement.
 
@@ -62,7 +62,7 @@ The importer reads `analysis/summary.csv`, `selected.csv`, `excluded.csv`, `cove
 
 Malformed numeric values, duplicate result keys, mismatched evaluation provenance, wrong sampling settings, missing primary metrics, and missing source files fail with an actionable error. The importer also rejects source files that change during the import. The previous `dashboard.json` stays intact on a failed import. Breakdown assets receive content-specific filenames and are written before the manifest is atomically replaced, keeping existing open views consistent during an update. Old breakdown assets remain available; for a clean deployment, import into a fresh `data` directory and deploy the complete site together.
 
-The initial payload is approximately 4 MB; the complete included site is approximately 56 MiB before HTTP compression. Subject breakdown files are requested only when opening result details. Run `make check-site` to see the current bundle size.
+The initial payload is approximately 5 MiB. Subject breakdown files are requested only when opening result details. The site retains previous breakdown assets for open views; run `make check-site` to see the current bundle size.
 
 ## Metric semantics
 
