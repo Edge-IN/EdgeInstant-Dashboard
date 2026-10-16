@@ -1,6 +1,6 @@
 # EdgeInstant Dashboard
 
-A minimalist, interactive evaluation workspace for EdgeInstant-Eval. The included snapshot contains **16 evaluated models, 18 benchmarks, and 3,035 score observations** across the requested greedy and sample-128 reports. Each run has 15 evaluated models; the model sets differ.
+A minimalist, interactive evaluation workspace for EdgeInstant-Eval. The included snapshot contains **28 evaluated models, 18 benchmarks, and 3,336 score observations** across the requested greedy and sample-128 reports. Greedy has 27 evaluated models and Sample has 15; the model sets differ.
 
 The site uses native JavaScript, CSS, and SVG. Importing and serving require only **Python 3.10+**. There is no Node dependency, build step, database, CDN, or external font requirement.
 
@@ -58,7 +58,7 @@ The importer also accepts `--config /path/to/config.json` and `--output /path/to
 
 ### Import behavior
 
-The importer reads `analysis/summary.csv`, `selected.csv`, `excluded.csv`, `coverage_gaps.csv`, `execution.csv`, and `breakdowns.csv`. It streams the breakdowns and **does not read the multi-gigabyte summary JSON or question diagnostics**. It never writes to EdgeInstant-Eval.
+The importer reads `analysis/summary.csv`, `selected.csv`, `excluded.csv`, `coverage_gaps.csv`, `execution.csv`, and `breakdowns.csv`. Coverage and exclusion reports may be blank when there are no entries. It streams the breakdowns and **does not read the multi-gigabyte summary JSON or question diagnostics**. It never writes to EdgeInstant-Eval.
 
 Model selectors include only models with summary results in that run. Coverage gaps and excluded evaluations remain in the JSON as audit metadata; they do not add model choices. A model appears automatically after its results are imported.
 

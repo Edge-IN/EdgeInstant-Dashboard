@@ -137,6 +137,75 @@ class ImportReportsTest(unittest.TestCase):
                 self.assertCountEqual(data["coverage"], [{**row, "run": "greedy"} for row in coverage])
                 self.assertEqual(data["excluded"], [{**row, "run": "greedy"} for row in excluded])
 
+    def test_optional_audit_files_accept_header_only_or_empty_exports(self):
+        # Eval emits a blank CSV when there are no coverage gaps or exclusions.
+        initial = self.build()
+        self.assertEqual(initial["coverage"], [])
+        self.assertEqual(initial["excluded"], [])
+        for coverage_contents in (b"", b"\n", b"\r\n\r\n"):
+            for excluded_contents in (b"", b"\n", b"\r\n\r\n"):
+                with self.subTest(coverage=coverage_contents, excluded=excluded_contents):
+                    (self.analysis / "coverage_gaps.csv").write_bytes(coverage_contents)
+                    (self.analysis / "excluded.csv").write_bytes(excluded_contents)
+                    data = self.build()
+                    self.assertEqual(data["coverage"], [])
+                    self.assertEqual(data["excluded"], [])
+                    self.assertEqual(data["rows"], initial["rows"])
+                    self.assertEqual(data["selected"], initial["selected"])
+                    self.assertEqual(data["execution"], initial["execution"])
+                    self.assertEqual(data["breakdownFiles"], initial["breakdownFiles"])
+
+    def test_nonempty_malformed_audit_files_preserve_published_snapshot(self):
+        self.build()
+        published = {
+            path.relative_to(self.output): path.read_bytes()
+            for path in self.output.rglob("*") if path.is_file()
+        }
+        malformed = (
+            b"setting-a,edgeinstant-small,ocrbench,no gaps\n",
+            b"\nsetting-a,edgeinstant-small,ocrbench,no gaps\n",
+            b"setting_id,model_id,benchmark\nsetting-a,edgeinstant-small,ocrbench\n",
+            b"setting_id,model_id,benchmark,reason,reason,evaluation_id\n",
+            b" \t\n",
+        )
+        for filename in ("coverage_gaps.csv", "excluded.csv"):
+            path = self.analysis / filename
+            valid = path.read_bytes()
+            for contents in malformed:
+                with self.subTest(filename=filename, contents=contents):
+                    path.write_bytes(contents)
+                    try:
+                        with self.assertRaises(importer.ImportFailure):
+                            self.build()
+                        self.assertEqual({
+                            path.relative_to(self.output): path.read_bytes()
+                            for path in self.output.rglob("*") if path.is_file()
+                        }, published)
+                    finally:
+                        path.write_bytes(valid)
+
+    def test_blank_required_files_preserve_published_snapshot(self):
+        self.build()
+        published = {
+            path.relative_to(self.output): path.read_bytes()
+            for path in self.output.rglob("*") if path.is_file()
+        }
+        for filename in ("summary.csv", "selected.csv", "execution.csv", "breakdowns.csv"):
+            path = self.analysis / filename
+            valid = path.read_bytes()
+            for contents in (b"", b"\n", b"\r\n\r\n"):
+                with self.subTest(filename=filename, contents=contents):
+                    path.write_bytes(contents)
+                    try:
+                        with self.assertRaises(importer.ImportFailure):
+                            self.build()
+                        self.assertEqual({
+                            path.relative_to(self.output): path.read_bytes()
+                            for path in self.output.rglob("*") if path.is_file()
+                        }, published)
+                    finally:
+                        path.write_bytes(valid)
+
     def test_breakdown_is_separate_and_content_addressed(self):
         data = self.build()
         url = data["breakdownFiles"]["greedy"]["ocrbench"]

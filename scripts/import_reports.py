@@ -113,11 +113,15 @@ def typed_row(row, location):
     return result
 
 
-def csv_rows(path, run, required):
+def csv_rows(path, run, required, *, allow_empty=False):
     try:
         with path.open(encoding="utf-8-sig", newline="") as stream:
             reader = csv.DictReader(stream)
             headers = reader.fieldnames or []
+            # Eval writes a blank CSV when an optional audit report has no rows.
+            # Reject nonempty content after a blank first line as malformed.
+            if allow_empty and not headers and not any(reader.reader):
+                return
             if len(headers) != len(set(headers)):
                 raise ImportFailure(f"{path}: duplicate CSV headers")
             missing = set(required) - set(headers)
@@ -233,10 +237,10 @@ def load_config(config_path, eval_root_override=None, output_override=None):
     return runs, output
 
 
-def unique_rows(path, run, required, key_fields):
+def unique_rows(path, run, required, key_fields, *, allow_empty=False):
     seen = set()
     result = []
-    for row in csv_rows(path, run, required):
+    for row in csv_rows(path, run, required, allow_empty=allow_empty):
         key = tuple(row.get(field) for field in key_fields)
         if key in seen:
             raise ImportFailure(f"{path}: duplicate key {key!r}")
@@ -345,7 +349,10 @@ def build(config_path=DEFAULT_CONFIG, eval_root=None, output=None):
                 ("excluded.csv", "excluded", ("evaluation_id", "reason"), ("evaluation_id", "benchmark", "reason")),
                 ("selected.csv", "selected", ("evaluation_id",), ("model_id", "benchmark")),
             ):
-                metadata = unique_rows(root / filename, run, ("setting_id", "model_id", "benchmark", *extra), keys)
+                metadata = unique_rows(
+                    root / filename, run, ("setting_id", "model_id", "benchmark", *extra), keys,
+                    allow_empty=target in {"coverage", "excluded"},
+                )
                 payload[target].extend(metadata)
                 if target == "selected":
                     selection = {(row["model_id"], row["benchmark"]): row["evaluation_id"] for row in metadata}
