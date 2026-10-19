@@ -72,7 +72,36 @@ def run(url: str, artifact_dir: Path) -> None:
                     else:
                         assert abs(float(text) - source["pass_at_k"] * 100) <= 0.051, (source, text)
 
-        heatmap_colors = {}
+        low_color, middle_color, high_color = "rgb(215, 48, 39)", "rgb(255, 255, 191)", "rgb(26, 152, 80)"
+        sample_colors = {}
+
+        def rgb(color):
+            return [int(channel.strip()) for channel in color.removeprefix("rgb(").removesuffix(")").split(",")]
+
+        def check_column_colors(target):
+            actual = target.locator("table.matrix tbody tr").evaluate_all("""rows => rows.map(row => ({
+                model: row.dataset.modelRow,
+                colors: [...row.querySelectorAll('td')].map(cell => getComputedStyle(cell).backgroundColor)
+            }))""")
+            cols = target.locator("table.matrix [data-sort-benchmark]").evaluate_all(
+                "buttons => buttons.map(button => [button.dataset.sortBenchmark, button.dataset.sortMetric])"
+            )
+            for index, (bench, metric) in enumerate(cols):
+                values = [
+                    (sources[("greedy", row["model"], bench, metric, 1)]["pass_at_k"], row["colors"][index])
+                    for row in actual
+                    if sources.get(("greedy", row["model"], bench, metric, 1), {}).get("pass_at_k") is not None
+                ]
+                if not values:
+                    continue
+                low, high = min(score for score, _ in values), max(score for score, _ in values)
+                for score, color in values:
+                    if low == high:
+                        assert color == middle_color, (bench, metric, score, color)
+                    elif score == low:
+                        assert color == low_color, (bench, metric, score, color)
+                    elif score == high:
+                        assert color == high_color, (bench, metric, score, color)
 
         def check_table_styles(target, selector="table.matrix"):
             cells = target.locator(f"{selector} th, {selector} td")
@@ -96,11 +125,19 @@ def run(url: str, artifact_dir: Path) -> None:
             for value in values:
                 assert value["centered"]
                 assert value["color"] not in ("transparent", "rgba(0, 0, 0, 0)")
-                if selector == "table.matrix" and target.locator("#page-title").inner_text() == "Greedy":
+                if selector == "table.matrix" and target.locator("#page-title").inner_text() == "Sample":
                     key = value["key"]
-                    assert heatmap_colors.setdefault(key, value["color"]) == value["color"], "A score changed color after filtering or theme changes"
+                    assert sample_colors.setdefault(key, value["color"]) == value["color"], "Sample colors must retain their fixed percentage scale"
+                if selector != "table.matrix" or target.locator("#page-title").inner_text() != "Greedy":
+                    red, green, _ = rgb(value["color"])
+                    if value["value"] <= 25:
+                        assert red > green, value
+                    elif value["value"] >= 75:
+                        assert green > red, value
             neutral = target.locator(f"{selector} td:has(.missing)")
             assert neutral.evaluate_all("cells => cells.every(cell => !cell.classList.contains('score-heat'))"), "Missing values must not receive score colors"
+            if selector == "table.matrix" and target.locator("#page-title").inner_text() == "Greedy":
+                check_column_colors(target)
             return values
 
         def check_square_plot(target):
@@ -172,16 +209,65 @@ def run(url: str, artifact_dir: Path) -> None:
         check_matrix()
         heatmap = check_table_styles(page)
         assert len({cell["color"] for cell in heatmap}) > 5, "Scores need a range of heatmap colors"
-        low, high = min(heatmap, key=lambda cell: cell["value"]), max(heatmap, key=lambda cell: cell["value"])
-        def rgb(color):
-            return [int(channel.strip()) for channel in color.removeprefix("rgb(").removesuffix(")").split(",")]
-        low_rgb, high_rgb = rgb(low["color"]), rgb(high["color"])
-        assert low_rgb[2] > low_rgb[1] and low_rgb[0] > low_rgb[1], low
-        assert high_rgb[0] > high_rgb[2] and high_rgb[1] > high_rgb[2], high
-        checks.append("Centered score tables use a fixed viridis heatmap, with distinct low/high colors and neutral missing cells")
+        expect(page.locator(".score-scale")).to_contain_text("per column")
+        checks.append("Centered Greedy tables scale every visible benchmark column independently from red to green, with neutral missing cells")
         assert not breakdown_requests, "Breakdown assets must load only when opening details"
         page.screenshot(path=str(artifact_dir / "greedy-desktop.png"), full_page=True)
         checks.append("Greedy opens directly with the full source-accurate matrix, two run tabs, Times New Roman headings, and no slogans or methodology")
+
+        # Route a small fixture only in an isolated browser context, keeping the
+        # actual imported data checks above and below unchanged.
+        fixture_ids = sorted(expected_models)[:4]
+        fixture = dict(data)
+        fixture["rows"] = []
+        fixture_values = {
+            ("ai2d", "accuracy"): [0, .1, .2, None],
+            ("hallusionbench", "Avg"): [.7, .8, .9, None],
+            ("hallusionbench", "qAcc"): [.4, .4, .4, None],
+            ("hallusionbench", "aAcc"): [None] * 4,
+            ("hallusionbench", "fAcc"): [None] * 4,
+        }
+        for (bench, metric), values in fixture_values.items():
+            for model_id, value in zip(fixture_ids, values):
+                fixture["rows"].append({
+                    "run": "greedy", "model_id": model_id, "benchmark": bench,
+                    "metric": metric, "k": 1, "pass_at_k": value,
+                })
+        fixture_context = browser.new_context()
+        fixture_context.route("**/data/dashboard.json", lambda route: route.fulfill(json=fixture))
+        fixture_page = fixture_context.new_page()
+        fixture_page.goto(url.rstrip("/") + "/#run=greedy&models=" + ",".join(fixture_ids)
+                          + "&benches=ai2d,hallusionbench&metrics=all", wait_until="networkidle")
+        expect(fixture_page.locator("table.matrix")).to_be_visible()
+
+        def fixture_cell(model_id, bench, metric):
+            return fixture_page.locator(
+                f'.score-cell[data-detail="{model_id}"][data-detail-benchmark="{bench}"][data-detail-metric="{metric}"]'
+            ).locator("..")
+
+        def cell_color(cell):
+            return cell.evaluate("cell => getComputedStyle(cell).backgroundColor")
+
+        for bench, metric in (("ai2d", "accuracy"), ("hallusionbench", "Avg")):
+            assert [cell_color(fixture_cell(model_id, bench, metric)) for model_id in fixture_ids[:3]] == [low_color, middle_color, high_color]
+        assert fixture_cell(fixture_ids[0], "ai2d", "accuracy").inner_text().strip() == "0.0"
+        assert fixture_page.locator("table.matrix td:has(.missing)").count() == 11
+        assert fixture_page.locator("table.matrix td:has(.missing)").evaluate_all(
+            "cells => cells.every(cell => !cell.classList.contains('score-heat'))"
+        )
+        for model_id in fixture_ids[:3]:
+            assert cell_color(fixture_cell(model_id, "hallusionbench", "qAcc")) == middle_color
+        fixture_page.locator(f'.model-chip[data-model="{fixture_ids[0]}"]').click()
+        for bench, metric in (("ai2d", "accuracy"), ("hallusionbench", "Avg")):
+            assert cell_color(fixture_cell(fixture_ids[1], bench, metric)) == low_color
+            assert cell_color(fixture_cell(fixture_ids[2], bench, metric)) == high_color
+        fixture_page.locator(f'.model-chip[data-model="{fixture_ids[2]}"]').click()
+        assert fixture_page.locator("table.matrix td.score-heat").count() == 3
+        assert fixture_page.locator("table.matrix td.score-heat").evaluate_all(
+            "(cells, neutral) => cells.every(cell => getComputedStyle(cell).backgroundColor === neutral)", middle_color
+        )
+        fixture_context.close()
+        checks.append("Independent column scales handle zero, disjoint score ranges, equal values, missing columns and model-selection changes")
 
         summary_ids = {row["model_id"] for row in data["rows"]}
         stale_ids = sorted({
@@ -244,6 +330,7 @@ def run(url: str, artifact_dir: Path) -> None:
         page.locator("#metric-mode").select_option("all")
         assert len(columns()) == 5
         check_matrix()
+        check_table_styles(page)
         check_export("greedy", set(ids), set(map(tuple, columns())), {1})
         alternate = page.locator('table.matrix .score-cell[data-detail-benchmark="hallusionbench"][data-detail-metric="qAcc"]').first
         alternate.click()
@@ -272,6 +359,7 @@ def run(url: str, artifact_dir: Path) -> None:
         page.locator("#category-select").select_option("instruction")
         assert columns() == [["ifeval", "prompt_strict"]]
         check_matrix()
+        check_table_styles(page)
         check_export("greedy", set(model_ids()), {("ifeval", "prompt_strict")}, {1})
         checks.append("Search, slash shortcut, family and suite filters restrict the actual matrix and exported rows")
 
@@ -327,6 +415,8 @@ def run(url: str, artifact_dir: Path) -> None:
 
         points = page.locator(".chart-point")
         assert points.count() == len(ids) * 8
+        points.first.scroll_into_view_if_needed()
+        page.evaluate("() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))")
         points.first.focus()
         expect(page.locator("#chart-tooltip")).to_be_visible()
         expect(page.locator("#chart-tooltip")).to_contain_text("k = 1")
@@ -343,6 +433,7 @@ def run(url: str, artifact_dir: Path) -> None:
         expect(page.locator("#detail-content")).to_contain_text(sources[("sample128", sample_id, "hallusionbench", "qAcc", 128)]["evaluation_id"])
         expect(page.locator("#detail-content .badge")).to_contain_text("k = 128")
         expect(page.locator("#breakdown-content .loading")).to_have_count(0)
+        check_table_styles(page, "#breakdown-table table")
         page.keyboard.press("Escape")
         page.evaluate("window.scrollTo(0, 0); document.activeElement?.blur()")
         page.screenshot(path=str(artifact_dir / "sample-curves-desktop.png"), full_page=True)

@@ -8,11 +8,12 @@ const icons = {
 };
 const icon = name => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[name]||''}</svg>`;
 const colors=['#18765c','#5b6eb3','#bc723c','#9b5d91','#3987a0','#788b38','#c25c5c','#726450','#3f827a','#847ab1','#8f7734','#9c6570','#526b91','#677d63'];
-// Viridis, fixed to the report's 0–1 score range across every table and selection.
-const scoreColors=['440154','472d7b','3b528b','2c728e','21918c','28ae80','5ec962','addc30','fde725'].map(hex=>[0,2,4].map(offset=>parseInt(hex.slice(offset,offset+2),16)));
-function heatAttributes(value){
+// Low scores are red; high scores are green. Equal column values use the midpoint.
+const scoreColors=['d73027','fdae61','ffffbf','a6d96a','1a9850'].map(hex=>[0,2,4].map(offset=>parseInt(hex.slice(offset,offset+2),16)));
+function heatAttributes(value,min=0,max=1){
   if(!isNumber(value))return '';
-  const position=Math.max(0,Math.min(1,value))*(scoreColors.length-1),i=Math.min(Math.floor(position),scoreColors.length-2),fraction=position-i;
+  const normalized=max>min?(value-min)/(max-min):.5;
+  const position=Math.max(0,Math.min(1,normalized))*(scoreColors.length-1),i=Math.min(Math.floor(position),scoreColors.length-2),fraction=position-i;
   const rgb=scoreColors[i].map((channel,c)=>Math.round(channel+(scoreColors[i+1][c]-channel)*fraction));
   const linear=rgb.map(channel=>{const s=channel/255;return s<=.04045?s/12.92:((s+.055)/1.055)**2.4;});
   const luminance=linear[0]*.2126+linear[1]*.7152+linear[2]*.0722,color=`rgb(${rgb.join(',')})`;
@@ -93,10 +94,13 @@ function scoreCell(row,id,b,metric){
   return `<button class="score-cell" data-detail="${e(id)}" data-detail-benchmark="${e(b.id)}" data-detail-metric="${e(metric)}" data-detail-k="${row.k}" data-detail-run="${e(row.run)}" title="${e(metricName(metric))}${interval}" aria-label="${e(model(id).name)}, ${e(b.name)}, ${e(metricName(metric))}, k ${row.k}, ${percent(row.pass_at_k)} percent">${percent(row.pass_at_k)}</button>`;
 }
 function matrix(){
-  const ms=sortedModels(),cols=columns();
+  const ms=sortedModels(),cols=columns().map(c=>{
+    const values=ms.map(m=>rowFor(m.id,c.benchmark.id,'greedy',1,c.metric)?.pass_at_k).filter(isNumber);
+    return {...c,min:values.length?Math.min(...values):0,max:values.length?Math.max(...values):1};
+  });
   if(!ms.length||!cols.length)return '<div class="empty">Select models and benchmarks.</div>';
   const head=cols.map(c=>{const active=state.sortBenchmark===c.benchmark.id&&state.sortMetric===c.metric;return `<th scope="col" class="metric-heading" aria-sort="${active?(state.direction==='asc'?'ascending':'descending'):'none'}"><button data-sort-benchmark="${e(c.benchmark.id)}" data-sort-metric="${e(c.metric)}" title="${e(c.benchmark.name)} · ${e(metricName(c.metric))}"><span>${e(c.benchmark.name)}</span><small>${e(metricName(c.metric))} ${active?(state.direction==='desc'?'↓':'↑'):''}</small></button></th>`;}).join('');
-  return `<div class="table-scroll" tabindex="0" role="region" aria-label="Greedy score matrix"><table class="matrix"><thead><tr><th scope="col" class="model-column"><button data-sort-model>Model</button></th>${head}</tr></thead><tbody>${ms.map(m=>`<tr data-model-row="${e(m.id)}"><th scope="row" class="model-column"><span class="model-name" title="${e(m.name)}">${e(compactName(m.name))}</span></th>${cols.map(c=>{const row=rowFor(m.id,c.benchmark.id,'greedy',1,c.metric);return `<td ${heatAttributes(row?.pass_at_k)}>${scoreCell(row,m.id,c.benchmark,c.metric)}</td>`;}).join('')}</tr>`).join('')}</tbody></table></div>`;
+  return `<div class="table-scroll" tabindex="0" role="region" aria-label="Greedy score matrix"><table class="matrix"><thead><tr><th scope="col" class="model-column"><button data-sort-model>Model</button></th>${head}</tr></thead><tbody>${ms.map(m=>`<tr data-model-row="${e(m.id)}"><th scope="row" class="model-column"><span class="model-name" title="${e(m.name)}">${e(compactName(m.name))}</span></th>${cols.map(c=>{const row=rowFor(m.id,c.benchmark.id,'greedy',1,c.metric);return `<td ${heatAttributes(row?.pass_at_k,c.min,c.max)}>${scoreCell(row,m.id,c.benchmark,c.metric)}</td>`;}).join('')}</tr>`).join('')}</tbody></table></div>`;
 }
 function toolbar(){return `<div class="table-toolbar">${state.run==='sample128'?`<label>k <select id="k-select" aria-label="Sampling budget">${KS.map(k=>option(k,k,state.k)).join('')}</select></label>`:`<label>Metrics <select id="metric-mode" aria-label="Metric display">${option('primary','Primary',state.metricMode)}${option('all','All',state.metricMode)}</select></label>`}<span class="results-count">${models().length} models · ${benches().length} benchmarks</span></div>`;}
 function curveData(){return models().map(m=>({id:m.id,color:colors[data.models.findIndex(item=>item.id===m.id)%colors.length],points:KS.map(k=>rowFor(m.id,state.benchmark,'sample128',k)).filter(r=>r&&isNumber(r.pass_at_k))})).filter(s=>s.points.length);}
@@ -116,7 +120,8 @@ function render(){
   $('#page-title').textContent=state.run==='greedy'?'Greedy':'Sample';
   const parameters=data.sources.find(s=>s.id===state.run).parameters;
   $('#run-meta').textContent=`n = ${parameters.n} · T = ${parameters.temperature}`;
-  $('#content').innerHTML=`${selectionPanels()}<section class="results-panel" aria-label="Results">${toolbar()}${state.run==='sample128'?curves():matrix()}<div class="table-footer"><span class="score-scale" aria-label="Score color scale: 0 to 100 percent"><span>0</span><span class="score-gradient" aria-hidden="true"></span><span>100%</span><span>· — missing</span></span><a href="data/dashboard.json" download="edgeinstant-results.json">JSON ↓</a></div></section>`;
+  const greedy=state.run==='greedy',scaleLabel=greedy?'Score colors: lowest to highest among displayed models, independently per column':'Score colors: 0 to 100 percent';
+  $('#content').innerHTML=`${selectionPanels()}<section class="results-panel" aria-label="Results">${toolbar()}${greedy?matrix():curves()}<div class="table-footer"><span class="score-scale" aria-label="${scaleLabel}" title="${scaleLabel}"><span>${greedy?'Low':'0'}</span><span class="score-gradient" aria-hidden="true"></span><span>${greedy?'High':'100%'}</span><span>${greedy?'· per column ':''}· — missing</span></span><a href="data/dashboard.json" download="edgeinstant-results.json">JSON ↓</a></div></section>`;
 }
 function toggleList(key,id){update({[key]:state[key].includes(id)?state[key].filter(item=>item!==id):[...state[key],id]});}
 function exportRows(){

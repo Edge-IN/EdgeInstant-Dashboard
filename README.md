@@ -1,6 +1,6 @@
 # EdgeInstant Dashboard
 
-A minimalist, interactive evaluation workspace for EdgeInstant-Eval. The included snapshot contains **28 evaluated models, 18 benchmarks, and 3,336 score observations** across the requested greedy and sample-128 reports. Greedy has 27 evaluated models and Sample has 15; the model sets differ.
+A minimalist, interactive evaluation workspace for EdgeInstant-Eval. The included snapshot contains **28 evaluated models, 18 benchmarks, and 5,832 score observations** across the requested greedy and sample-128 reports. Greedy and Sample each have 27 evaluated models; the model sets differ.
 
 The site uses native JavaScript, CSS, and SVG. Importing and serving require only **Python 3.10+**. There is no Node dependency, build step, database, CDN, or external font requirement.
 
@@ -20,6 +20,8 @@ Open **http://localhost:8765**. Use HTTP rather than opening `index.html` direct
 
 - **Greedy:** a sortable score matrix. Select models and benchmarks with chips; filter by suite, family, or name. Switch between primary and all metrics. Click a score for source details and subject breakdowns.
 - **Sample:** square pass@k curves with the corresponding table below, covering k = 1, 2, 4, 8, 16, 32, 64, and 128. Select models, a benchmark, and a metric. Chart points support hover and keyboard focus.
+
+Table colors run from red to green: Greedy scales each benchmark/metric column independently across displayed models, using the midpoint when all values match; Sample and breakdown tables use a fixed 0–100% scale.
 
 CSV export follows the displayed models, benchmarks, metrics, and sampling budgets. Shared URLs preserve selections and filters. Use `/` to focus model search and `Escape` to close result details. Light/dark appearance is stored locally. Wide result tables scroll within their panels on narrow screens.
 
@@ -64,7 +66,7 @@ Model selectors include only models with summary results in that run. Coverage g
 
 Malformed numeric values, duplicate result keys, mismatched evaluation provenance, wrong sampling settings, missing primary metrics, and missing source files fail with an actionable error. The importer also rejects source files that change during the import. The previous `dashboard.json` stays intact on a failed import. Breakdown assets receive content-specific filenames and are written before the manifest is atomically replaced, keeping existing open views consistent during an update. Old breakdown assets remain available; for a clean deployment, import into a fresh `data` directory and deploy the complete site together.
 
-The initial payload is approximately 5 MiB. Subject breakdown files are requested only when opening result details. The site retains previous breakdown assets for open views; run `make check-site` to see the current bundle size.
+The initial payload is approximately 9 MiB. Subject breakdown files are requested only when opening result details. The site retains previous breakdown assets for open views; run `make check-site` to see the current bundle size.
 
 ## Metric semantics
 
